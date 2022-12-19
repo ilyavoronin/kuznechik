@@ -6,10 +6,10 @@ const IKEY_SIZE: usize = BLOCK_SIZE;
 type IKey<'a> = &'a [u8];
 
 static LINEAR_COEFS: &'static [u8; BLOCK_SIZE] = &[
-    1, 148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148,
+    148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148, 1
 ];
 static LINEAR_COEFS_DEC: &'static [u8; BLOCK_SIZE] = &[
-    148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148, 1,
+    1, 148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148
 ];
 
 pub struct Kuznechik {
@@ -70,12 +70,12 @@ impl Kuznechik {
         }
         for _ in 0..BLOCK_SIZE {
             let mut acc = Polynom::new(BLOCK_SIZE);
-            for i in 0..BLOCK_SIZE {
+            for i in (0..BLOCK_SIZE).rev() {
                 acc = acc.sum(&res[i].mult(LINEAR_COEFS[i], galois));
-                if i == BLOCK_SIZE - 1 {
+                if i == 0 {
                     res[i] = acc.clone();
                 } else {
-                    res[i] = res[i + 1].clone();
+                    res[i] = res[i - 1].clone();
                 }
             }
         }
@@ -89,12 +89,12 @@ impl Kuznechik {
         }
         for _ in 0..BLOCK_SIZE {
             let mut acc = Polynom::new(BLOCK_SIZE);
-            for i in (0..BLOCK_SIZE).rev() {
+            for i in 0..BLOCK_SIZE {
                 acc = acc.sum(&res[i].mult(LINEAR_COEFS_DEC[i], galois));
-                if i == 0 {
+                if i == BLOCK_SIZE - 1 {
                     res[i] = acc.clone();
                 } else {
-                    res[i] = res[i - 1].clone();
+                    res[i] = res[i + 1].clone();
                 }
             }
         }
@@ -161,14 +161,14 @@ impl Kuznechik {
 
     fn single_step_linear(&self, data: &mut [u8]) {
         let mut acc = 0_u8;
-        for j in 0..BLOCK_SIZE {
+        for j in (0..BLOCK_SIZE).rev() {
             acc = self
                 .galois
                 .sum(acc, self.galois.mult(LINEAR_COEFS[j], data[j]));
-            if j == BLOCK_SIZE - 1 {
+            if j == 0 {
                 data[j] = acc;
             } else {
-                data[j] = data[j + 1];
+                data[j] = data[j - 1];
             }
         }
     }
@@ -219,30 +219,29 @@ impl Kuznechik {
         ikeys[1].clone_from_slice(&key[IKEY_SIZE..]);
 
         for i in 1..5 {
-            ikeys[i * 2] = ikeys[i * 2 - 2].clone();
-            ikeys[i * 2 + 1] = ikeys[i * 2 - 1].clone();
-
+            let mut l = ikeys[i * 2 - 2].clone();
+            let mut r = ikeys[i * 2 - 1].clone();
             for j in 0..8 {
                 let mut key = vec![0_u8; IKEY_SIZE];
-                key[0] = ((i - 1) * 8 + j + 1) as u8;
+                key[IKEY_SIZE - 1] = ((i - 1) * 8 + j + 1) as u8;
 
                 self.linear_transform(key.as_mut_slice());
 
-                let mut l = ikeys[i * 2].clone();
-                let mut r = ikeys[i * 2 + 1].clone();
                 self.feistel(l.as_mut_slice(), r.as_mut_slice(), key.as_slice());
-
-                ikeys[i * 2] = r;
-                ikeys[i * 2 + 1] = l;
             }
+            ikeys[i * 2] = l;
+            ikeys[i * 2 + 1] = r;
         }
 
         ikeys
     }
 
     fn feistel(&self, l: &mut [u8], r: &mut [u8], k: IKey) {
+        let mut tmp = vec![0_u8; IKEY_SIZE];
+        tmp.clone_from_slice(r);
+        r.clone_from_slice(l);
         self.apply_full_level(l, k);
-        self.xor_transform(l, &r);
+        self.xor_transform(l, tmp.as_slice());
     }
 }
 
@@ -277,3 +276,25 @@ static NL_PERM_DEC: &'static [u8; 256] = &[
     36, 52, 203, 237, 244, 206, 153, 16, 68, 64, 146, 58, 1, 38, 18, 26, 72, 104, 245, 129, 139,
     199, 214, 32, 10, 8, 0, 76, 215, 116,
 ];
+
+#[cfg(test)]
+mod tests {
+    use crate::encrypt::Kuznechik;
+    use crate::objects::{Key, KEY_SIZE};
+
+    #[test]
+    fn test_gost_34_12_2018() {
+        let k = Kuznechik::new();
+
+        let mut key: Key = [0_u8; KEY_SIZE];
+        key.copy_from_slice(hex::decode("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").unwrap().as_slice());
+        let mut data = hex::decode("1122334455667700ffeeddccbbaa9988").unwrap();
+
+        k.encrypt(&mut data, key);
+        assert_eq!("7f679d90bebc24305a468d42b9d4edcd", hex::encode(&data));
+
+        k.decrypt(&mut data, key);
+
+        assert_eq!("1122334455667700ffeeddccbbaa9988", hex::encode(data));
+    }
+}
