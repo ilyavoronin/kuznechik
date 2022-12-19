@@ -11,6 +11,6 @@ cargo  run --release
 CPU: Intel Core i7-8750H
 
 ```
-Encryption speed: 154.5595054095827 Mb/s
-Decryption speed: 109.89010989010988 Mb/s
+Encryption speed: 155.76323987538942 Mb/s
+Decryption speed: 145.98540145985402 Mb/s
 ```

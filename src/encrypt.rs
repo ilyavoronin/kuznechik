@@ -49,6 +49,10 @@ impl Kuznechik {
         let mut keys = self.get_keys(key);
         keys.reverse();
 
+        for j in (0..data.len()).step_by(BLOCK_SIZE) {
+            self.nonlinear_transform(&mut data[j..j + BLOCK_SIZE]);
+        }
+
         for i in 0..9 {
             let table = self.calc_table_dec(keys[i].as_slice());
             for j in (0..data.len()).step_by(BLOCK_SIZE) {
@@ -59,6 +63,7 @@ impl Kuznechik {
             }
         }
         for j in (0..data.len()).step_by(BLOCK_SIZE) {
+            self.nonlinear_transform_dec(&mut data[j..j + BLOCK_SIZE]);
             self.xor_transform(&mut data[j..j + BLOCK_SIZE], keys[9].as_slice());
         }
     }
@@ -130,7 +135,7 @@ impl Kuznechik {
 
                 for k in 0..BLOCK_SIZE {
                     mask |= (self.galois.mult(
-                        j ^ ((keyn >> (i * 8)) & 255) as u8,
+                        NL_PERM_DEC[j] ^ ((keyn >> (i * 8)) & 255) as u8,
                         self.dec_coefs[k].coef[i],
                     ) as u128)
                         << (k * 8);
@@ -202,7 +207,6 @@ impl Kuznechik {
     fn apply_dec_full_level_shifted(&self, data: &mut [u8], table: &[u128; 4096]) {
         assert_eq!(data.len(), BLOCK_SIZE);
         self.linear_xor_transform(data, table);
-        self.nonlinear_transform_dec(data);
     }
 
     fn apply_full_level(&self, data: &mut [u8], key: IKey) {
