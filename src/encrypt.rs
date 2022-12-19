@@ -111,7 +111,7 @@ impl Kuznechik {
                 let mut mask = 0_u128;
 
                 for k in 0..BLOCK_SIZE {
-                    mask |= (self.galois.mult(j, self.coefs[k].coef[i]) as u128) << (k * 8);
+                    mask |= (self.galois.mult(NL_PERM[j], self.coefs[k].coef[i]) as u128) << (k * 8);
                 }
                 res[i * 256 + j as usize] = mask ^ (keyn & (255 << i * 8));
             }
@@ -196,7 +196,6 @@ impl Kuznechik {
 
     fn apply_full_level_shifted(&self, data: &mut [u8], table: &[u128; 4096]) {
         assert_eq!(data.len(), BLOCK_SIZE);
-        self.nonlinear_transform(data);
         self.linear_xor_transform(data, table);
     }
 
